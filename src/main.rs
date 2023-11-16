@@ -2,19 +2,28 @@ use easy_qr::{encoding::Encodable, ErrorCorrection, QRCodeVersion};
 
 fn main() {
     // test_numeric();
-    test_alphanumeric()
+    // test_alphanumeric()
+    test_byte();
 }
 #[inline]
 fn test(s: &str) {
-    let encoded = s.create_bits(QRCodeVersion::V1, ErrorCorrection::H);
-    println!("{} {}:", s, s.len().div_ceil(3));
+    let encoded = s.create_bits(QRCodeVersion::V2, ErrorCorrection::H);
+    println!("{}:", s);
     encoded
         .0
         .into_iter()
         .for_each(|cw| println!("byte: {cw:#04x} - {cw:#010b}"));
 }
 #[inline]
-fn test_alphanumeric() {
+pub fn test_byte() {
+    for s in [
+        "aЉ윇😱"
+    ] {
+        test(s)
+    }
+}
+#[inline]
+pub fn test_alphanumeric() {
     for s in [
         "PROJECT NAYUKI",
     ] {
