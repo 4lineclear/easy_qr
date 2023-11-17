@@ -12,6 +12,7 @@
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod bit_stream;
 pub mod encoding;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,7 +53,7 @@ impl EncodingMode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum QRCodeVersion {
     V1,
     V2,
@@ -109,6 +110,8 @@ macro_rules! impl_qr_version {
         ),*
     ) => {
         impl QRCodeVersion {
+            /// Fits a given number of codewords and [`ErrorCorrection`]
+            ///
             #[inline]
             #[must_use]
             pub const fn fit_version(count: usize, ec: ErrorCorrection) -> Option<Self> {
@@ -189,7 +192,6 @@ impl_qr_version! {
     (V39, 2812, 2216, 1582, 1222),
     (V40, 2956, 2334, 1666, 1276)
 }
-
 
 // total bits:
 // 26
