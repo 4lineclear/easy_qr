@@ -3,7 +3,11 @@ use easy_qr::{encoding::Encodable, ErrorCorrection, QRCodeVersion};
 fn main() {
     // test_numeric();
     // test_alphanumeric()
-    test_byte();
+    // test_byte();
+    // for _ in 0..4296 {
+    //     print!(":")
+    // }
+    // println!()
 }
 #[inline]
 fn test(s: &str) {
@@ -16,20 +20,15 @@ fn test(s: &str) {
 }
 #[inline]
 pub fn test_byte() {
-    for s in [
-        "aЉ윇😱"
-    ] {
+    for s in ["aЉ윇😱"] {
         test(s)
     }
 }
 #[inline]
 pub fn test_alphanumeric() {
-    for s in [
-        "PROJECT NAYUKI",
-    ] {
+    for s in ["PROJECT NAYUKI"] {
         test(s)
     }
-
 }
 #[inline]
 pub fn test_numeric() {
