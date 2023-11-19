@@ -12,7 +12,6 @@ pub trait Encodable {
     /// Creates the primitive data bits needed to create a QR Code
     fn create_bits(&self, version: QRCodeVersion, ec: ErrorCorrection) -> (Vec<u8>, EncodingMode);
 }
-
 impl Encodable for str {
     fn create_bits(&self, version: QRCodeVersion, ec: ErrorCorrection) -> (Vec<u8>, EncodingMode) {
         use EncodingMode::*;
@@ -27,7 +26,6 @@ impl Encodable for str {
         )
     }
 }
-
 #[must_use]
 pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     let required_code_words = version.data_size(ec);
@@ -63,7 +61,6 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
     add_final_bits(&mut result, required_code_words);
     result.into_parts().0
 }
-
 /// Encodes the given numeric digit only [`str`]
 /// into the data segment of a QR Code
 ///
@@ -105,7 +102,6 @@ fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode,
     bytes.push(mode, 4);
     bytes.push(count as u16, count_bits);
 }
-
 /// Adds filler bits until desired length is achieved
 #[inline]
 fn add_final_bits(bytes: &mut Bytes, required_code_words: usize) {
@@ -146,7 +142,6 @@ pub const fn count_bits_count(version: QRCodeVersion, encoding: EncodingMode) ->
         }
     }
 }
-
 /// Takes the given byte, turning it into its alphanumeric counterpart
 ///
 /// Assumes that the inputted byte is convertible.
