@@ -31,7 +31,9 @@ pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
     add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
+
     s.bytes().for_each(|byte| result.push(byte as u16, 8));
+
     add_final_bits(&mut result, required_code_words);
     result.into_parts().0
 }
@@ -52,9 +54,8 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
         })
         .for_each(|bits| result.push(bits, 11));
 
-    if !remaining.is_empty() {
-        let remaining = byte_to_alphanumeric(remaining[0]);
-        result.push(remaining as u16, 6);
+    if let [remaining] = *remaining {
+        result.push(byte_to_alphanumeric(remaining) as u16, 6);
     }
     add_final_bits(&mut result, required_code_words);
     result.into_parts().0
