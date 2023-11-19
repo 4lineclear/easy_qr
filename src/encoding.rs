@@ -1,6 +1,9 @@
-use super::{EncodingMode, ErrorCorrection};
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::cast_possible_truncation)]
+use crate::byte_stream::Bytes;
 
-use super::QRCodeVersion;
+use super::{EncodingMode, ErrorCorrection, QRCodeVersion};
 
 pub const BYTE_WIDTH: usize = 8;
 pub const CHAR_WIDTH: usize = 10;
@@ -29,23 +32,17 @@ impl Encodable for str {
 }
 
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::cast_possible_truncation)]
 pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     let required_code_words = version.data_size(ec);
-    let mut result = Vec::with_capacity(required_code_words);
-    let mut unused = add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
-    for byte in s.as_bytes() {
-        *result.last_mut().unwrap() |= byte >> (BYTE_WIDTH - unused);
-        result.push(byte << unused);
-        unused = BYTE_WIDTH - unused;
-    }
-    add_final_bits(&mut result, required_code_words, unused);
-    result
+    let mut result = Bytes::with_capacity(required_code_words);
+    add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
+    s.as_bytes()
+        .iter()
+        .for_each(|byte| result.push(*byte as u16, 8));
+    add_final_bits(&mut result, required_code_words);
+    result.into_parts().0
 }
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::cast_possible_truncation)]
 pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     #[inline]
     const fn group_2(bytes: &[u8]) -> u16 {
@@ -55,44 +52,21 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
             _ => unreachable!(),
         }
     }
-    /// `AlphaNumeric` codeword width
-    const AN_WIDTH: usize = 11;
-
     let required_code_words = version.data_size(ec);
-    let mut result = Vec::with_capacity(required_code_words);
-    let mut unused = add_start_bits(&mut result, version, EncodingMode::Alphanumeric, s.len());
+    let mut result = Bytes::with_capacity(required_code_words);
     let chunks = s.as_bytes().chunks_exact(2);
     let remaining = chunks.remainder();
 
-    for bits in chunks.map(group_2) {
-        const DIFF: usize = AN_WIDTH - BYTE_WIDTH;
-        *result.last_mut().unwrap() |= (bits >> (AN_WIDTH - unused)) as u8;
-        if unused < DIFF {
-            result.push((bits >> (DIFF - unused)) as u8);
-            result.push((bits << (BYTE_WIDTH - DIFF + unused)) as u8);
-            unused += BYTE_WIDTH - DIFF;
-        } else {
-            result.push((bits << (unused - DIFF)) as u8);
-            unused -= DIFF;
-        }
-    }
-    #[allow(clippy::items_after_statements)]
+    add_start_bits(&mut result, version, EncodingMode::Alphanumeric, s.len());
+
+    chunks.map(group_2).for_each(|bits| result.push(bits, 11));
+
     if !remaining.is_empty() {
         let remaining = byte_to_alphanumeric(remaining[0]);
-        println!("{remaining:#010b} {unused}");
-        const REMAINDER_WIDTH: usize = 6;
-        const DIFF: usize = BYTE_WIDTH - REMAINDER_WIDTH;
-        if unused < REMAINDER_WIDTH {
-            *result.last_mut().unwrap() |= remaining >> (REMAINDER_WIDTH - unused);
-            result.push(remaining << (DIFF + unused));
-            unused += unused;
-        } else {
-            *result.last_mut().unwrap() |= remaining << (unused - REMAINDER_WIDTH);
-            unused -= REMAINDER_WIDTH;
-        }
+        result.push(remaining as u16, 6);
     }
-    add_final_bits(&mut result, required_code_words, unused);
-    result
+    add_final_bits(&mut result, required_code_words);
+    result.into_parts().0
 }
 
 /// Encodes the given numeric digit only [`str`]
@@ -100,133 +74,62 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
 ///
 /// Careful, lots of purposeful truncation done below
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::cast_possible_truncation)]
 pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     #[inline]
     const fn group_3(bytes: &[u8]) -> u16 {
         (bytes[0] - b'0') as u16 * 100 + (bytes[1] - b'0') as u16 * 10 + (bytes[2] - b'0') as u16
     }
     let required_code_words = version.data_size(ec);
-    let mut result = Vec::with_capacity(required_code_words);
-    let mut unused = add_start_bits(&mut result, version, EncodingMode::Numeric, s.len());
+    let mut result = Bytes::with_capacity(required_code_words);
     let chunks = s.as_bytes().chunks_exact(3);
     let remaining_digits = chunks.remainder();
 
-    for bits in chunks.map(group_3) {
-        const DIFF: usize = CHAR_WIDTH - BYTE_WIDTH;
-        match unused {
-            // can simply allocate two new bytes, as the previous byte is filled
-            0 => {
-                result.push((bits >> DIFF) as u8);
-                result.push((bits << (BYTE_WIDTH - DIFF)) as u8);
-                unused = BYTE_WIDTH - DIFF;
-            }
-            // in the (unlikely) case that one bit is unused
-            // this case is special as `unused` will remain as 1 and
-            // will always require 3 bytes to be changed (1 mutated, 2 added)
-            1 => {
-                *result.last_mut().unwrap() |= (bits >> 7) as u8;
-                result.push((bits >> 1) as u8);
-                result.push((bits << 7) as u8);
-            }
-            // for any other case
-            _ => {
-                *result.last_mut().unwrap() |= (bits >> (CHAR_WIDTH - unused)) as u8;
-                result.push((bits << (unused - DIFF)) as u8);
-                unused -= DIFF;
-            }
-        }
-    }
-    // encode the remaining digits
+    add_start_bits(&mut result, version, EncodingMode::Numeric, s.len());
+
+    chunks.map(group_3).for_each(|bits| result.push(bits, 10));
+
     match remaining_digits {
         [] => (),
         [b] => {
-            /// 4 is used since a single digit takes up to 4 bits to represent
-            const DIGIT_WIDTH: usize = 4;
             let digit = b - b'0';
-            match unused {
-                0 => {
-                    result.push(digit << DIGIT_WIDTH);
-                    unused = DIGIT_WIDTH;
-                }
-                1..=3 => {
-                    *result.last_mut().unwrap() |= digit >> (DIGIT_WIDTH - unused);
-                    result.push(digit << (DIGIT_WIDTH + unused));
-                    unused += DIGIT_WIDTH;
-                }
-                _ => {
-                    *result.last_mut().unwrap() |= digit << (BYTE_WIDTH - unused);
-                    unused -= DIGIT_WIDTH;
-                }
-            }
+            result.push(digit as u16, 4);
         }
         [b1, b2] => {
-            /// 7 is used since two digit takes up to 7 bits to represent
-            const DIGIT_WIDTH: usize = 7;
             let digit = (b1 - b'0') * 10 + (b2 - b'0');
-            match unused {
-                0 => {
-                    result.push(digit << (BYTE_WIDTH - DIGIT_WIDTH));
-                    unused = 1;
-                }
-                DIGIT_WIDTH => {
-                    *result.last_mut().unwrap() |= digit;
-                    unused = 0;
-                }
-                _ => {
-                    *result.last_mut().unwrap() |= digit >> (DIGIT_WIDTH - unused);
-                    result.push(digit << (unused + 1));
-                    unused += 1;
-                }
-            }
+            result.push(digit as u16, 7);
         }
         _ => unreachable!(),
     }
-    add_final_bits(&mut result, required_code_words, unused);
-    result
+    add_final_bits(&mut result, required_code_words);
+    result.into_parts().0
 }
 /// Returns the number of bits unused in the last inputted [byte](u8)
 #[allow(clippy::cast_possible_truncation)]
-fn add_start_bits(
-    vec: &mut Vec<u8>,
-    version: QRCodeVersion,
-    mode: EncodingMode,
-    count: usize,
-) -> usize {
+fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, count: usize) {
     let count_bits = count_bits_count(version, mode);
-    let mode = mode as usize;
-    // the combination of `mode` and `count` bits
-    let bits = mode << count_bits | count;
-    let mut bits_left = 4 + count_bits;
-    while bits_left >= BYTE_WIDTH {
-        // shifts just so that the needed window of 8 bits is taken
-        vec.push((bits >> (bits_left - BYTE_WIDTH)) as u8);
-        bits_left -= BYTE_WIDTH;
-    }
-    // pushes the remaining that couldn't be shoved into a byte,
-    // returning the amount unused on the last byte
-    vec.push((bits << (BYTE_WIDTH - bits_left)) as u8);
-    BYTE_WIDTH - bits_left
+    let mode = mode as u16;
+    bytes.push(mode, 4);
+    bytes.push(count as u16, count_bits);
 }
 
 /// Adds filler bits until desired length is achieved
 #[inline]
 #[allow(clippy::missing_panics_doc)]
-fn add_final_bits(result: &mut Vec<u8>, required_code_words: usize, unused: usize) {
-    // making sure there are enough termination bits (4)
-    // if end of length is reached, then it is unnecessary
-    if unused < 4 && result.len() < required_code_words {
-        result.push(0x00);
+fn add_final_bits(bytes: &mut Bytes, required_code_words: usize) {
+    if (bytes.last().unwrap() & 0b0000_1111 != 0 || bytes.shift() > 4)
+        && bytes.len() < required_code_words
+    {
+        bytes.push_dumb(0);
     }
-    let mut filler = [0xec, 0x11].into_iter().cycle();
-    while result.len() < required_code_words {
-        result.push(filler.next().unwrap());
+    let mut i = 0;
+    while bytes.len() < required_code_words {
+        bytes.push_dumb([0xec, 0x11][i & 1]);
+        i += 1;
     }
 }
 #[inline]
 #[must_use]
-pub const fn count_bits_count(version: QRCodeVersion, encoding: EncodingMode) -> usize {
+pub const fn count_bits_count(version: QRCodeVersion, encoding: EncodingMode) -> u16 {
     use EncodingMode::*;
     use QRCodeVersion::*;
     match version {

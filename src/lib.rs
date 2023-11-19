@@ -1,3 +1,4 @@
+//! yeah
 #![deny(
     clippy::all,
     clippy::pedantic,
@@ -12,7 +13,7 @@
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::module_name_repetitions)]
 
-pub mod bit_stream;
+pub mod byte_stream;
 pub mod encoding;
 
 #[derive(Debug, Clone, Copy)]

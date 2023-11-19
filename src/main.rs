@@ -1,6 +1,8 @@
 use easy_qr::{encoding::Encodable, ErrorCorrection, QRCodeVersion};
 
 fn main() {
+    // let mut bytes = Bytes::default();
+    // bytes.push::<_16>(10);
     // test_numeric();
     // test_alphanumeric()
     // test_byte();

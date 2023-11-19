@@ -111,7 +111,6 @@ fn numeric_limit() {
     let mut encoded = vec![0x16, 0xEC, 0x7E];
     encoded.append(&mut [0x7F, 0x9F, 0xE7, 0xF9, 0xFE].repeat(590));
     encoded.extend([0x7F, 0x9F, 0xE7]);
-    println!("{}", encoded.len());
     test![
         QRCodeVersion::V40,
         ErrorCorrection::L,
@@ -147,7 +146,6 @@ fn byte_limit() {
     let mut encoded = vec![0x40, 0xB8, 0x8F];
     encoded.append(&mut [0x48, 0xFB, 0xFB, 0xFF].repeat(737));
     encoded.extend([0x48, 0xFB, 0xFB, 0xF0, 0xEC]);
-    println!("{} {}", chars.len(), encoded.len());
     test![
         QRCodeVersion::V40,
         ErrorCorrection::L,
