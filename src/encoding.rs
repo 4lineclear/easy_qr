@@ -5,9 +5,6 @@ use crate::byte_stream::Bytes;
 
 use super::{EncodingMode, ErrorCorrection, QRCodeVersion};
 
-pub const BYTE_WIDTH: usize = 8;
-pub const CHAR_WIDTH: usize = 10;
-
 #[cfg(test)]
 mod test;
 
@@ -36,9 +33,7 @@ pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
     add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
-    s.as_bytes()
-        .iter()
-        .for_each(|byte| result.push(*byte as u16, 8));
+    s.bytes().for_each(|byte| result.push(byte as u16, 8));
     add_final_bits(&mut result, required_code_words);
     result.into_parts().0
 }
@@ -104,7 +99,6 @@ pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> V
     result.into_parts().0
 }
 /// Returns the number of bits unused in the last inputted [byte](u8)
-#[allow(clippy::cast_possible_truncation)]
 fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, count: usize) {
     let count_bits = count_bits_count(version, mode);
     let mode = mode as u16;
@@ -114,7 +108,6 @@ fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode,
 
 /// Adds filler bits until desired length is achieved
 #[inline]
-#[allow(clippy::missing_panics_doc)]
 fn add_final_bits(bytes: &mut Bytes, required_code_words: usize) {
     if (bytes.last().unwrap() & 0b0000_1111 != 0 || bytes.shift() > 4)
         && bytes.len() < required_code_words
