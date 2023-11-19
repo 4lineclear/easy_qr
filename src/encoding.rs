@@ -30,93 +30,73 @@ impl Encodable for str {
 pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
+
     add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
-
     s.bytes().for_each(|byte| result.push(byte as u16, 8));
-
     add_final_bits(&mut result, required_code_words);
+
     result.into_parts().0
 }
 #[must_use]
 pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
-    let chunks = s.as_bytes().chunks_exact(2);
-    let remaining = chunks.remainder();
 
     add_start_bits(&mut result, version, EncodingMode::Alphanumeric, s.len());
-
-    chunks
-        .map(|bytes| match *bytes {
-            [b] => byte_to_alphanumeric(b) as u16,
-            [b1, b2] => byte_to_alphanumeric(b1) as u16 * 45 + byte_to_alphanumeric(b2) as u16,
-            _ => unreachable!(),
+    s.as_bytes()
+        .chunks(2)
+        .map(|bytes| {
+            bytes
+                .iter()
+                .map(|&b| byte_to_alphanumeric(b) as u16)
+                .fold((0, 1), |(acc, w), b| (acc * 45 + b, w + 5))
         })
-        .for_each(|bits| result.push(bits, 11));
-
-    if let [remaining] = *remaining {
-        result.push(byte_to_alphanumeric(remaining) as u16, 6);
-    }
+        .for_each(|(bits, w)| result.push(bits, w));
     add_final_bits(&mut result, required_code_words);
+
     result.into_parts().0
 }
-/// Encodes the given numeric digit only [`str`]
-/// into the data segment of a QR Code
-///
-/// Careful, lots of purposeful truncation done below
 #[must_use]
 pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
-    let chunks = s.as_bytes().chunks_exact(3);
-    let remaining_digits = chunks.remainder();
 
     add_start_bits(&mut result, version, EncodingMode::Numeric, s.len());
-
-    chunks
+    s.as_bytes()
+        .chunks(3)
         .map(|bytes| {
-            (bytes[0] - b'0') as u16 * 100
-                + (bytes[1] - b'0') as u16 * 10
-                + (bytes[2] - b'0') as u16
+            bytes
+                .iter()
+                .map(|b| (b - b'0') as u16)
+                .fold((0, 1), |(acc, w), b| (acc * 10 + b, w + 3))
         })
-        .for_each(|bits| result.push(bits, 10));
-
-    match remaining_digits {
-        [] => (),
-        [b] => {
-            let digit = b - b'0';
-            result.push(digit as u16, 4);
-        }
-        [b1, b2] => {
-            let digit = (b1 - b'0') * 10 + (b2 - b'0');
-            result.push(digit as u16, 7);
-        }
-        _ => unreachable!(),
-    }
+        .for_each(|(bits, w)| result.push(bits, w));
     add_final_bits(&mut result, required_code_words);
+
     result.into_parts().0
 }
 /// Returns the number of bits unused in the last inputted [byte](u8)
+#[inline]
 fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, count: usize) {
     let count_bits = count_bits_count(version, mode);
     let mode = mode as u16;
     bytes.push(mode, 4);
     bytes.push(count as u16, count_bits);
 }
-/// Adds filler bits until desired length is achieved
+/// Adds the final bits including the terminator and filler bits
 #[inline]
 fn add_final_bits(bytes: &mut Bytes, required_code_words: usize) {
-    if (bytes.last().unwrap() & 0b0000_1111 != 0 || bytes.shift() > 4)
-        && bytes.len() < required_code_words
-    {
-        bytes.push_dumb(0);
+    dbg!(bytes.shift());
+    if (bytes.shift() > 4 || bytes.shift() == 0) && bytes.len() < required_code_words {
+        bytes.push_full_byte(0);
     }
     let mut i = 0;
     while bytes.len() < required_code_words {
-        bytes.push_dumb([0xec, 0x11][i & 1]);
+        bytes.push_full_byte([0xec, 0x11][i & 1]);
         i += 1;
     }
 }
+/// Returns the number of bits to use to represent the count
 #[inline]
 #[must_use]
 pub const fn count_bits_count(version: QRCodeVersion, encoding: EncodingMode) -> u16 {

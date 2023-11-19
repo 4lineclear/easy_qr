@@ -62,7 +62,8 @@ impl Bytes {
         let Self { bytes, shift } = self;
         (bytes, shift)
     }
-    pub(crate) fn push_dumb(&mut self, data: u8) {
+    pub(crate) fn push_full_byte(&mut self, data: u8) {
+        self.shift = 0;
         self.bytes.push(data);
     }
     #[must_use]
