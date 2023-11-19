@@ -37,14 +37,6 @@ pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<
 }
 #[must_use]
 pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
-    #[inline]
-    const fn group_2(bytes: &[u8]) -> u16 {
-        match *bytes {
-            [b] => byte_to_alphanumeric(b) as u16,
-            [b1, b2] => byte_to_alphanumeric(b1) as u16 * 45 + byte_to_alphanumeric(b2) as u16,
-            _ => unreachable!(),
-        }
-    }
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
     let chunks = s.as_bytes().chunks_exact(2);
@@ -52,7 +44,13 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
 
     add_start_bits(&mut result, version, EncodingMode::Alphanumeric, s.len());
 
-    chunks.map(group_2).for_each(|bits| result.push(bits, 11));
+    chunks
+        .map(|bytes| match *bytes {
+            [b] => byte_to_alphanumeric(b) as u16,
+            [b1, b2] => byte_to_alphanumeric(b1) as u16 * 45 + byte_to_alphanumeric(b2) as u16,
+            _ => unreachable!(),
+        })
+        .for_each(|bits| result.push(bits, 11));
 
     if !remaining.is_empty() {
         let remaining = byte_to_alphanumeric(remaining[0]);
@@ -67,10 +65,6 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
 /// Careful, lots of purposeful truncation done below
 #[must_use]
 pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
-    #[inline]
-    const fn group_3(bytes: &[u8]) -> u16 {
-        (bytes[0] - b'0') as u16 * 100 + (bytes[1] - b'0') as u16 * 10 + (bytes[2] - b'0') as u16
-    }
     let required_code_words = version.data_size(ec);
     let mut result = Bytes::with_capacity(required_code_words);
     let chunks = s.as_bytes().chunks_exact(3);
@@ -78,7 +72,13 @@ pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> V
 
     add_start_bits(&mut result, version, EncodingMode::Numeric, s.len());
 
-    chunks.map(group_3).for_each(|bits| result.push(bits, 10));
+    chunks
+        .map(|bytes| {
+            (bytes[0] - b'0') as u16 * 100
+                + (bytes[1] - b'0') as u16 * 10
+                + (bytes[2] - b'0') as u16
+        })
+        .for_each(|bits| result.push(bits, 10));
 
     match remaining_digits {
         [] => (),
