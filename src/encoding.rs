@@ -10,16 +10,31 @@ mod test;
 
 pub trait Encodable {
     /// Creates the primitive data bits needed to create a QR Code
-    fn create_bits(&self, version: QRCodeVersion, ec: ErrorCorrection) -> (Vec<u8>, EncodingMode);
+    /// according to the specified [version](QRCodeVersion) and
+    /// [error correction](ErrorCorrection)
+    ///
+    /// # Returns
+    ///
+    /// - `Vec<u8>`: The actual data bits
+    /// - `EncodingMode`: The encoding mode which was determined
+    fn create_bits(
+        &self,
+        version: QRCodeVersion,
+        ec: ErrorCorrection,
+    ) -> Option<(Vec<u8>, EncodingMode)>;
 }
 impl Encodable for str {
-    fn create_bits(&self, version: QRCodeVersion, ec: ErrorCorrection) -> (Vec<u8>, EncodingMode) {
+    fn create_bits(
+        &self,
+        version: QRCodeVersion,
+        ec: ErrorCorrection,
+    ) -> Option<(Vec<u8>, EncodingMode)> {
         use EncodingMode::*;
         let mode = EncodingMode::analyze_string(self);
         let required_code_words = version.data_size(ec);
         let mut bytes = Bytes::with_capacity(required_code_words);
 
-        encode_start(&mut bytes, version, EncodingMode::Byte, self.len());
+        encode_start(&mut bytes, version, mode, self.len());
         (match mode {
             Numeric => encode_numeric,
             Alphanumeric => encode_alphanumeric,
@@ -27,7 +42,11 @@ impl Encodable for str {
         })(self, &mut bytes);
         encode_end(&mut bytes, required_code_words);
 
-        (bytes.into_parts().0, mode)
+        if bytes.len() > required_code_words {
+            None
+        } else {
+            Some((bytes.into_parts().0, mode))
+        }
     }
 }
 #[inline]
@@ -69,7 +88,6 @@ fn encode_start(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, c
 /// Adds the final bits including the terminator and filler bits
 #[inline]
 fn encode_end(bytes: &mut Bytes, required_code_words: usize) {
-    dbg!(bytes.shift());
     if (bytes.shift() > 4 || bytes.shift() == 0) && bytes.len() < required_code_words {
         bytes.push_full_byte(0);
     }

@@ -16,6 +16,7 @@ fn test(s: &str) {
     let encoded = s.create_bits(QRCodeVersion::V2, ErrorCorrection::H);
     println!("{}:", s);
     encoded
+        .unwrap()
         .0
         .into_iter()
         .for_each(|cw| println!("byte: {cw:#04x} - {cw:#010b}"));
