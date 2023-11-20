@@ -16,33 +16,26 @@ impl Encodable for str {
     fn create_bits(&self, version: QRCodeVersion, ec: ErrorCorrection) -> (Vec<u8>, EncodingMode) {
         use EncodingMode::*;
         let mode = EncodingMode::analyze_string(self);
-        (
-            (match mode {
-                Numeric => encode_numeric,
-                Alphanumeric => encode_alphanumeric,
-                Byte => encode_byte,
-            })(self, version, ec),
-            mode,
-        )
+        let required_code_words = version.data_size(ec);
+        let mut bytes = Bytes::with_capacity(required_code_words);
+
+        encode_start(&mut bytes, version, EncodingMode::Byte, self.len());
+        (match mode {
+            Numeric => encode_numeric,
+            Alphanumeric => encode_alphanumeric,
+            Byte => encode_byte,
+        })(self, &mut bytes);
+        encode_end(&mut bytes, required_code_words);
+
+        (bytes.into_parts().0, mode)
     }
 }
-#[must_use]
-pub fn encode_byte(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
-    let required_code_words = version.data_size(ec);
-    let mut result = Bytes::with_capacity(required_code_words);
-
-    add_start_bits(&mut result, version, EncodingMode::Byte, s.len());
-    s.bytes().for_each(|byte| result.push(byte as u16, 8));
-    add_final_bits(&mut result, required_code_words);
-
-    result.into_parts().0
+#[inline]
+pub fn encode_byte(s: &str, bytes: &mut Bytes) {
+    s.bytes().for_each(|byte| bytes.push(byte as u16, 8));
 }
-#[must_use]
-pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
-    let required_code_words = version.data_size(ec);
-    let mut result = Bytes::with_capacity(required_code_words);
-
-    add_start_bits(&mut result, version, EncodingMode::Alphanumeric, s.len());
+#[inline]
+pub fn encode_alphanumeric(s: &str, bytes: &mut Bytes) {
     s.as_bytes()
         .chunks(2)
         .map(|bytes| {
@@ -51,17 +44,10 @@ pub fn encode_alphanumeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection)
                 .map(|&b| byte_to_alphanumeric(b) as u16)
                 .fold((0, 1), |(acc, w), b| (acc * 45 + b, w + 5))
         })
-        .for_each(|(bits, w)| result.push(bits, w));
-    add_final_bits(&mut result, required_code_words);
-
-    result.into_parts().0
+        .for_each(|(bits, w)| bytes.push(bits, w));
 }
-#[must_use]
-pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> Vec<u8> {
-    let required_code_words = version.data_size(ec);
-    let mut result = Bytes::with_capacity(required_code_words);
-
-    add_start_bits(&mut result, version, EncodingMode::Numeric, s.len());
+#[inline]
+pub fn encode_numeric(s: &str, bytes: &mut Bytes) {
     s.as_bytes()
         .chunks(3)
         .map(|bytes| {
@@ -70,14 +56,11 @@ pub fn encode_numeric(s: &str, version: QRCodeVersion, ec: ErrorCorrection) -> V
                 .map(|b| (b - b'0') as u16)
                 .fold((0, 1), |(acc, w), b| (acc * 10 + b, w + 3))
         })
-        .for_each(|(bits, w)| result.push(bits, w));
-    add_final_bits(&mut result, required_code_words);
-
-    result.into_parts().0
+        .for_each(|(bits, w)| bytes.push(bits, w));
 }
 /// Returns the number of bits unused in the last inputted [byte](u8)
 #[inline]
-fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, count: usize) {
+fn encode_start(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode, count: usize) {
     let count_bits = count_bits_count(version, mode);
     let mode = mode as u16;
     bytes.push(mode, 4);
@@ -85,7 +68,7 @@ fn add_start_bits(bytes: &mut Bytes, version: QRCodeVersion, mode: EncodingMode,
 }
 /// Adds the final bits including the terminator and filler bits
 #[inline]
-fn add_final_bits(bytes: &mut Bytes, required_code_words: usize) {
+fn encode_end(bytes: &mut Bytes, required_code_words: usize) {
     dbg!(bytes.shift());
     if (bytes.shift() > 4 || bytes.shift() == 0) && bytes.len() < required_code_words {
         bytes.push_full_byte(0);
