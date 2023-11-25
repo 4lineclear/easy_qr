@@ -22,7 +22,12 @@ impl Bytes {
             width == 16 || width < 16 && data < (1 << width),
             "{data} is not a {width} bit number",
         );
+        // there is definitely a way to make this generic over any width
+        // and code word size but no matter what I do I can't find it
         let sum = width as u32 + self.shift;
+        // need to create some kind of way to decide when to shift r/l
+        // depending on whether the shift less or more than some value
+        // when l its (val - sum), when r its (sum - val)
         match (self.shift, sum) {
             (0, 0..=8) => {
                 self.bytes.push((data << (8 - sum)) as u8);
